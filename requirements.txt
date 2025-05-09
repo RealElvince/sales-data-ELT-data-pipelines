@@ -1,0 +1,5 @@
+Faker
+pandas
+apache-airflow-providers-google
+
+google-cloud-storage
