@@ -1,6 +1,5 @@
 from airflow import DAG
 from airflow.providers.google.cloud.operators.bigquery import BigQueryInsertJobOperator
-from airflow.providers.google.cloud.operators.bigquery import BigQueryExecuteQueryOperator
 from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 from datetime import datetime
@@ -9,14 +8,19 @@ from faker import Faker
 import random
 from google.cloud import storage
 import io
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Configuration
-PROJECT_ID ="<your-project-id>"
-BUCKET_NAME = "<your-bucket-name>"
-GCS_PATH = "<your-gcs-path>"
-BIGQUERY_DATASET = "<your-bigquery-dataset>"
-BIGQUERY_TABLE = "<your-bigquery-table>"
-TRANSFORMED_TABLE = "<your-transformed-table>"
+PROJECT_ID = os.getenv("PROJECT_ID")
+BUCKET_NAME = os.getenv("BUCKET_NAME")
+GCS_PATH = os.getenv("GCS_PATH")
+BIGQUERY_DATASET = os.getenv("BIGQUERY_DATASET")
+BIGQUERY_TABLE = os.getenv("BIGQUERY_TABLE")
+TRANSFORMED_TABLE = os.getenv
 
 # schema definition
 schema_fields = [
@@ -119,12 +123,20 @@ with DAG(
                     """
     
     # Transform BigQuery Data
-    transform_bq_data= BigQueryExecuteQueryOperator(
+    transform_bq_data= BigQueryInsertJobOperator(
         task_id="transform_bigquery_data",
-        sql=transform_bq_qry,
-        destination_dataset_table=f"{PROJECT_ID}.{BIGQUERY_DATASET}.{TRANSFORMED_TABLE}",
-        write_disposition="WRITE_TRUNCATE",
-        use_legacy_sql=False,
+        configuration={
+          "query": {
+                "query": transform_bq_qry,
+                "useLegacySql": False,
+                "destinationTable": {
+                "projectId": PROJECT_ID,
+                "datasetId": BIGQUERY_DATASET,
+                "tableId": TRANSFORMED_TABLE,
+            },
+            "writeDisposition": "WRITE_TRUNCATE",
+        }
+    }
     )
 
     # customer and number of orders Transform Bigquery Data
@@ -139,12 +151,20 @@ with DAG(
  
 
     # Transform BigQuery Data
-    transform_bq_data_2 = BigQueryExecuteQueryOperator(
-        task_id="transform_biquery_data_2",
-        sql=transform_bq_qry_2,
-        destination_dataset_table=f"{PROJECT_ID}.{BIGQUERY_DATASET}.{TRANSFORMED_TABLE}",
-        write_disposition="WRITE_TRUNCATE",
-        use_legacy_sql=False,
+    transform_bq_data_2 = BigQueryInsertJobOperator(
+          task_id="transform_bigquery_data_2",
+         configuration={
+           "query": {
+                "query": transform_bq_qry_2,
+                "useLegacySql": False,
+                "destinationTable": {
+                "projectId": PROJECT_ID,
+                "datasetId": BIGQUERY_DATASET,
+                "tableId": TRANSFORMED_TABLE,
+            },
+            "writeDisposition": "WRITE_TRUNCATE",
+        }
+    }
     )
 
     # Task dependencies
