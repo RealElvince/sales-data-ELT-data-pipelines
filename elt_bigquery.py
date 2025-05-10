@@ -20,7 +20,9 @@ BUCKET_NAME = os.getenv("BUCKET_NAME")
 GCS_PATH = os.getenv("GCS_PATH")
 BIGQUERY_DATASET = os.getenv("BIGQUERY_DATASET")
 BIGQUERY_TABLE = os.getenv("BIGQUERY_TABLE")
-TRANSFORMED_TABLE = os.getenv
+AMOUNT_TABLE = os.getenv("AMOUNT_TABLE")
+TRANSFORMED_TABLE = os.getenv("TRANSFORMED_TABLE")
+PROCEDURE_NAME = os.getenv("PROCEDURE_NAME")
 
 # schema definition
 schema_fields = [
@@ -104,6 +106,48 @@ with DAG(
             }
         },
     )
+    #Insert data into sales_orders table
+    insert_sales_orders = f"""
+                           CREATE OR REPLACE PROCEDURE `{PROJECT_ID}.{BIGQUERY_DATASET}.{PROCEDURE_NAME}`(
+                            order_id INT64,
+                            customer_name STRING,
+                            order_amount FLOAT64,
+                            order_date DATE,
+                            product STRING
+                           )
+
+                           BEGIN
+                            INSERT INTO `{PROJECT_ID}.{BIGQUERY_DATASET}.{BIGQUERY_TABLE}`(order_id, customer_name, order_amount, order_date, product)
+                            VALUES(order_id, customer_name, order_amount, order_date, product);
+                           END
+                           """
+    
+
+
+    # Insert data into sales_orders table task
+    insert_sales_orders_task = BigQueryInsertJobOperator(
+        task_id="insert_sales_orders",
+        configuration={
+            "query": {
+                "query": insert_sales_orders,
+                "useLegacySql": False,
+            }
+        },)
+    
+    # Call the procedure to insert data
+    call_procedure = f""" 
+                       CALL `{PROJECT_ID}.{BIGQUERY_DATASET}.{PROCEDURE_NAME}`(234, 'Rick Grimes', 150.00, '2024-11-18', 'Widget A');
+                """
+    
+    # Call the procedure task
+    call_procedure_task = BigQueryInsertJobOperator(
+        task_id="call_procedure",
+        configuration={
+            "query": {
+                "query": call_procedure,
+                "useLegacySql": False,}
+        }
+    )
 
     # categorize orders by amount
     transform_bq_qry =f"""
@@ -145,7 +189,9 @@ with DAG(
                             customer_name,
                             COUNT(order_id) AS number_of_orders,
                             SUM(order_amount) AS total_spent
-                            FROM `{PROJECT_ID}.{BIGQUERY_DATASET}.{TRANSFORMED_TABLE}`
+                            FROM `{PROJECT_ID}.{BIGQUERY_DATASET}.{BIGQUERY_TABLE}`
+                            GROUP BY customer_name
+                            ORDER BY customer_name
                           """
 
  
@@ -160,7 +206,7 @@ with DAG(
                 "destinationTable": {
                 "projectId": PROJECT_ID,
                 "datasetId": BIGQUERY_DATASET,
-                "tableId": TRANSFORMED_TABLE,
+                "tableId": AMOUNT_TABLE,
             },
             "writeDisposition": "WRITE_TRUNCATE",
         }
@@ -172,6 +218,8 @@ with DAG(
         start_task
         >> generate_sales_data
         >> load_to_bigquery
+        >> insert_sales_orders_task
+        >> call_procedure_task
         >> transform_bq_data
         >> transform_bq_data_2
         >> end_task
